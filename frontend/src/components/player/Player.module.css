@@ -1,0 +1,480 @@
+.playerWrapper {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background-color: #000000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.videoElement {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  cursor: pointer;
+}
+
+.lockedBadge {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  background: rgba(18, 18, 18, 0.85);
+  backdrop-filter: var(--backdrop-blur);
+  -webkit-backdrop-filter: var(--backdrop-blur);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #e5e5e5;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
+  pointer-events: none;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+.emptyStreamState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: var(--color-text-secondary);
+  text-align: center;
+  padding: 32px;
+}
+
+.emptyTitle {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  letter-spacing: -0.01em;
+}
+
+.emptySubtitle {
+  font-size: 14px;
+  max-width: 440px;
+  line-height: 1.6;
+  color: #8c8c8c;
+}
+
+.configureButton {
+  padding: 11px 24px;
+  background: var(--color-accent-netflix);
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+  box-shadow: 0 4px 12px rgba(229, 9, 20, 0.35);
+}
+
+.configureButton:hover {
+  background: var(--color-accent-netflix-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-netflix-glow);
+}
+
+/* Custom Video Player Overlay & Controls */
+.controlsOverlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.6) 45%, transparent 100%);
+  padding: 28px 24px 16px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  opacity: 1;
+  transition: opacity 0.45s cubic-bezier(0.16, 1, 0.3, 1), transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 40;
+}
+
+.controlsOverlay.fadedOut {
+  opacity: 0 !important;
+  transform: translateY(14px);
+  pointer-events: none !important;
+}
+
+.hideCursor, .hideCursor * {
+  cursor: none !important;
+}
+
+.progressBarContainer {
+  position: relative;
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  transition: height 0.15s ease;
+}
+
+.progressBarContainer:hover {
+  height: 7px;
+}
+
+.progressBarFill {
+  height: 100%;
+  background: var(--color-accent-netflix);
+  border-radius: var(--radius-full);
+  position: relative;
+  transition: width 0.05s linear;
+}
+
+.progressBarThumb {
+  position: absolute;
+  right: -5px;
+  top: 50%;
+  transform: translateY(-50%) scale(0);
+  width: 12px;
+  height: 12px;
+  background: #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.6);
+  transition: transform 0.15s ease;
+}
+
+.progressBarContainer:hover .progressBarThumb {
+  transform: translateY(-50%) scale(1);
+}
+
+.controlsRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.controlsGroupLeft {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.controlsGroupRight {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.controlButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 10px;
+  background: transparent;
+  color: #ffffff;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  transition: all var(--transition-fast);
+  cursor: pointer;
+}
+
+.controlButton:hover {
+  background: rgba(255, 255, 255, 0.16);
+  transform: scale(1.05);
+}
+
+.controlButton:active {
+  transform: scale(0.96);
+}
+
+.controlButton.activeTrack {
+  background: rgba(229, 9, 20, 0.25);
+  color: #ffffff;
+  border: 1px solid rgba(229, 9, 20, 0.5);
+}
+
+.timeDisplay {
+  font-size: 13px;
+  font-family: var(--font-family-mono);
+  color: #d1d5db;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.liveIndicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #ffffff;
+  background: var(--color-accent-netflix);
+  padding: 2px 8px;
+  border-radius: var(--radius-xs);
+  letter-spacing: 0.05em;
+}
+
+.liveDot {
+  width: 6px;
+  height: 6px;
+  background: #ffffff;
+  border-radius: 50%;
+  animation: pulseLive 1.5s infinite;
+}
+
+@keyframes pulseLive {
+  0% { opacity: 1; }
+  50% { opacity: 0.3; }
+  100% { opacity: 1; }
+}
+
+/* Netflix Style Audio & Subtitles Selection Panel - Solid Obsidian */
+.netflixTrackPanel {
+  position: absolute;
+  bottom: 68px;
+  right: 20px;
+  width: 520px;
+  max-width: calc(100% - 40px);
+  background: #141414;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 24px 50px rgba(0, 0, 0, 0.95);
+  display: flex;
+  flex-direction: column;
+  z-index: 100;
+  overflow: hidden;
+  animation: netflixMenuFadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes netflixMenuFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.netflixTrackHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.netflixTrackTitle {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.netflixCloseBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.08);
+  color: #a3a3a3;
+  transition: all var(--transition-fast);
+}
+
+.netflixCloseBtn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+}
+
+.netflixTrackColumns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  flex: 1;
+  overflow-y: auto;
+  max-height: 280px;
+}
+
+.netflixTrackCol {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px;
+}
+
+.netflixTrackCol:first-child {
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.netflixColTitle {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8c8c8c;
+  padding: 4px 8px 8px 8px;
+}
+
+.netflixTrackList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+}
+
+.netflixTrackItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-radius: var(--radius-xs);
+  font-size: 13px;
+  color: #b3b3b3;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  user-select: none;
+  gap: 8px;
+}
+
+.netflixTrackItem:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.netflixTrackItem.selectedTrack {
+  color: #ffffff;
+  font-weight: 600;
+  background: rgba(229, 9, 20, 0.15);
+}
+
+.netflixCheckIcon {
+  color: var(--color-accent-netflix);
+  flex-shrink: 0;
+}
+
+.netflixEmptyMessage {
+  padding: 10px 8px;
+  font-size: 12px;
+  color: #737373;
+  font-style: italic;
+}
+
+/* Fallback popover legacy */
+.trackMenuPopover {
+  display: none;
+}
+
+/* Co-browsing web viewer styles */
+.webContainer {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #000000;
+}
+
+.webTopBar {
+  height: 48px;
+  background: var(--color-bg-surface-elevated);
+  border-bottom: 1px solid var(--color-border-subtle);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 12px;
+  z-index: 10;
+}
+
+.webUrlInput {
+  flex: 1;
+  background: var(--color-bg-base);
+  border: 1px solid var(--color-border-medium);
+  border-radius: var(--radius-sm);
+  padding: 7px 14px;
+  font-size: 13px;
+  color: var(--color-text-primary);
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.webUrlInput:focus {
+  border-color: var(--color-accent-netflix);
+}
+
+.webFrame {
+  flex: 1;
+  width: 100%;
+  height: calc(100% - 48px);
+  border: none;
+  background: #ffffff;
+}
+
+.remoteCursor {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
+  z-index: 50;
+  transition: top 0.05s linear, left 0.05s linear;
+}
+
+.cursorPointer {
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 14px solid var(--color-accent-netflix);
+  transform: rotate(-35deg);
+}
+
+.cursorLabel {
+  background: var(--color-accent-netflix);
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: var(--radius-xs);
+  position: absolute;
+  left: 14px;
+  top: 10px;
+  white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+  .controlsOverlay {
+    padding: 14px 12px 8px 12px;
+  }
+  .controlsGroupLeft {
+    gap: 8px;
+  }
+  .timeDisplay {
+    font-size: 11px;
+  }
+  .controlButton {
+    padding: 6px 8px;
+  }
+  .controlButton span {
+    display: none;
+  }
+  .netflixTrackPanel {
+    right: 8px;
+    bottom: 60px;
+    width: calc(100% - 16px);
+  }
+  .netflixTrackColumns {
+    grid-template-columns: 1fr;
+  }
+  .netflixTrackCol:first-child {
+    border-right: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+}

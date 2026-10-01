@@ -1,0 +1,43 @@
+# ==============================================================================
+# cPanel Phusion Passenger & Apache Configuration for StreamRoom Backend
+# ==============================================================================
+
+<IfModule mod_passenger.c>
+    PassengerEnabled on
+    PassengerAppType python
+    PassengerStartupFile passenger_wsgi.py
+    PassengerAppRoot .
+    PassengerPython /usr/bin/python3
+    # Optional: adjust node/python concurrency per hosting limits
+    PassengerMinInstances 1
+    PassengerMaxRequests 5000
+</IfModule>
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /
+
+    # Ensure Authorization headers are passed cleanly through WSGI
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+    # WebSocket Proxy Upgrade Support (for /ws/ endpoints)
+    RewriteCond %{HTTP:Upgrade} =websocket [NC]
+    RewriteCond %{HTTP:Connection} upgrade [NC]
+    RewriteRule ^ws/(.*) ws://127.0.0.1:8000/ws/$1 [P,L]
+</IfModule>
+
+# Security Headers
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-Frame-Options "SAMEORIGIN"
+    Header set X-XSS-Protection "1; mode=block"
+    Header set Access-Control-Allow-Origin "*"
+    Header set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS, PATCH"
+    Header set Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With"
+</IfModule>
+
+# Protect database and environment files from direct HTTP access
+<FilesMatch "^(\.env|\.db|streamroom\.db)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>

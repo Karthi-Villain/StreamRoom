@@ -1,0 +1,75 @@
+:root {
+  /* Color Palette - Netflix Obsidian & Apple TV Glass Theme */
+  --color-bg-base: #141414;
+  --color-bg-pitch: #0a0a0a;
+  --color-bg-surface: #181818;
+  --color-bg-surface-elevated: #242424;
+  --color-bg-surface-hover: #2f2f2f;
+  --color-bg-overlay: rgba(10, 10, 10, 0.82);
+  --color-bg-glass: rgba(24, 24, 24, 0.75);
+  --color-bg-glass-card: rgba(36, 36, 36, 0.65);
+  --color-bg-glass-subtle: rgba(255, 255, 255, 0.05);
+
+  --color-border-subtle: rgba(255, 255, 255, 0.09);
+  --color-border-medium: rgba(255, 255, 255, 0.18);
+  --color-border-focus: #E50914;
+
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #a3a3a3;
+  --color-text-muted: #737373;
+
+  /* Netflix Signature Accents */
+  --color-accent-netflix: #E50914;
+  --color-accent-netflix-hover: #f40612;
+  --color-accent-netflix-dark: #b80710;
+  
+  /* Component Compatibility Aliases */
+  --color-accent-blue: #E50914;
+  --color-accent-blue-hover: #f40612;
+  --color-accent-emerald: #46d369;
+  --color-accent-amber: #e5a00d;
+  --color-accent-rose: #E50914;
+
+  /* Avatar Color Palette (Netflix profiles) */
+  --avatar-red: #E50914;
+  --avatar-blue: #0071eb;
+  --avatar-green: #2ecc71;
+  --avatar-yellow: #f1c40f;
+  --avatar-purple: #9b59b6;
+  --avatar-teal: #1abc9c;
+  --avatar-orange: #e67e22;
+
+  /* Typography */
+  --font-family-base: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-family-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* Border Radii */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --radius-full: 9999px;
+
+  /* Apple TV / Netflix Shadows & Glassmorphism */
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.55), 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 14px 30px rgba(0, 0, 0, 0.75), 0 4px 10px rgba(0, 0, 0, 0.4);
+  --shadow-netflix-glow: 0 0 24px rgba(229, 9, 20, 0.42);
+  --shadow-emerald-glow: 0 0 18px rgba(70, 211, 105, 0.45);
+
+  --backdrop-blur: blur(20px) saturate(180%);
+  --backdrop-blur-sm: blur(10px);
+  --transition-fast: 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-normal: 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-spring: 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}

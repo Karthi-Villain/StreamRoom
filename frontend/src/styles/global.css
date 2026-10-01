@@ -1,0 +1,101 @@
+@import "./tokens.css";
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  width: 100%;
+  min-height: 100%;
+  background-color: var(--color-bg-base);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-base);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+#root {
+  width: 100%;
+  min-height: 100%;
+  overflow-y: visible;
+}
+
+::selection {
+  background-color: var(--color-accent-netflix);
+  color: #ffffff;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: inherit;
+  user-select: none;
+}
+
+input, select, textarea {
+  font-family: inherit;
+  color: inherit;
+  user-select: text;
+}
+
+/* Netflix / Apple TV ultra-sleek minimalist scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(229, 9, 20, 0.6);
+}
+
+@keyframes bannerSlideDown {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -24px) scale(0.96);
+  }
+  70% {
+    transform: translate(-50%, 4px) scale(1.01);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+@keyframes voicePulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(70, 211, 105, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(70, 211, 105, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(70, 211, 105, 0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

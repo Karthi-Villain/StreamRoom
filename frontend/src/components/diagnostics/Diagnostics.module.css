@@ -1,0 +1,102 @@
+/* Apple TV & Netflix Diagnostics HUD */
+
+.hudContainer {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  background: #141414;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: var(--radius-lg);
+  padding: 14px 18px;
+  color: var(--color-text-primary);
+  font-size: 12px;
+  font-family: var(--font-family-mono);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 250px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.95);
+  animation: fadeIn 0.2s ease forwards;
+}
+
+.hudHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 700;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 8px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 11px;
+}
+
+.metricsGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 14px;
+}
+
+.metricItem {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.metricLabel {
+  color: #8c8c8c;
+}
+
+.metricValue {
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.metricValue.optimal {
+  color: #46d369;
+}
+
+.metricValue.fair {
+  color: #e5a00d;
+}
+
+.metricValue.degraded {
+  color: #E50914;
+}
+
+.telemetryTable {
+  margin-top: 8px;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.telemetryTable th,
+.telemetryTable td {
+  padding: 5px 6px;
+  text-align: left;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.telemetryTable th {
+  color: #8c8c8c;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 10px;
+}
+
+.toggleDetailsButton {
+  font-size: 11.5px;
+  color: var(--color-accent-netflix);
+  cursor: pointer;
+  margin-top: 6px;
+  text-align: center;
+  font-weight: 600;
+  transition: opacity var(--transition-fast);
+}
+
+.toggleDetailsButton:hover {
+  text-decoration: underline;
+}
