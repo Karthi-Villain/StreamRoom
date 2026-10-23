@@ -1,9 +1,15 @@
+import time
 from fastapi import APIRouter, HTTPException, Header, status
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any
 
-from app.models.room import RoomSettings, AccessMode, ControlPolicy, MediaMode
+from app.models.room import RoomSettings, AccessMode, ControlPolicy, MediaMode, TelemetryReport
+from app.models.events import WSEventType, WSMessage
 from app.services.room_manager import room_manager
+from app.services.sync_engine import SyncEngine
+from app.services.webrtc_signaling import WebRTCSignalingService
+from app.services.telemetry import telemetry_service
+from app.services.pusher_service import pusher_service
 from app.core.security import hash_pin
 
 router = APIRouter(prefix="/rooms", tags=["Rooms"])
@@ -192,4 +198,173 @@ async def update_room_settings(
             "web_url": room.settings.web_url,
             "diagnostics_enabled": room.settings.diagnostics_enabled
         }
+    }
+
+class RoomEventRequest(BaseModel):
+    event: str
+    payload: Dict[str, Any] = Field(default_factory=dict)
+    client_id: str
+    token: str
+    socket_id: Optional[str] = None
+
+@router.post("/{room_id}/events")
+async def send_room_event(room_id: str, req: RoomEventRequest):
+    """
+    Handle incoming room action from client and broadcast to Pusher channel.
+    Works seamlessly across all browsers over standard HTTPS without WebSockets.
+    """
+    room = room_manager.get_room(room_id)
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+
+    if not room_manager.validate_session(room_id, req.client_id, req.token):
+        raise HTTPException(status_code=401, detail="Invalid session token")
+
+    event_type = req.event
+    payload = req.payload
+    client_id = req.client_id
+    participant = room.participants.get(client_id)
+    is_host = participant.is_host if participant else False
+
+    # Clock sync ping-pong
+    if event_type == "time:ping":
+        return {
+            "event": "time:pong",
+            "payload": {"t0": payload.get("t0"), "t_server": time.time()},
+            "timestamp": time.time()
+        }
+
+    # Video playback synchronization
+    elif event_type == "sync:play":
+        await SyncEngine.handle_video_play(room, client_id, payload)
+    elif event_type == "sync:pause":
+        await SyncEngine.handle_video_pause(room, client_id, payload)
+    elif event_type == "sync:seek":
+        await SyncEngine.handle_video_seek(room, client_id, payload)
+    elif event_type == "sync:track_change":
+        await SyncEngine.handle_track_change(room, client_id, payload)
+    elif event_type == "sync:url_change":
+        await SyncEngine.handle_url_change(room, client_id, payload)
+
+    # Web co-browsing synchronization
+    elif event_type == "sync:media_mode_change":
+        await SyncEngine.handle_media_mode_change(room, client_id, payload)
+    elif event_type == "sync:web_navigate":
+        await SyncEngine.handle_web_navigate(room, client_id, payload)
+    elif event_type == "sync:web_scroll":
+        await SyncEngine.handle_web_scroll(room, client_id, payload)
+    elif event_type == "sync:web_click":
+        await SyncEngine.handle_web_click(room, client_id, payload)
+    elif event_type == "sync:web_cursor":
+        await SyncEngine.handle_web_cursor(room, client_id, payload)
+
+    # Live text chat
+    elif event_type == "chat:message":
+        sender_name = participant.display_name if participant else "Anonymous"
+        chat_msg = {
+            "id": payload.get("id", f"msg_{int(time.time()*1000)}"),
+            "sender_client_id": client_id,
+            "sender_name": sender_name,
+            "is_host": is_host,
+            "content": payload.get("content", ""),
+            "sent_at": time.time()
+        }
+        await pusher_service.trigger(
+            f"room-{room_id}",
+            "chat:message",
+            {"event": "chat:message", "payload": chat_msg, "timestamp": time.time()},
+            socket_id=req.socket_id
+        )
+        return {"status": "ok"}
+
+    # WebRTC voice mesh signaling
+    elif event_type == "webrtc:join_voice":
+        await WebRTCSignalingService.handle_join_voice(room, client_id)
+    elif event_type == "webrtc:leave_voice":
+        await WebRTCSignalingService.handle_leave_voice(room, client_id)
+    elif event_type == "webrtc:offer":
+        await WebRTCSignalingService.handle_offer(room, client_id, payload)
+    elif event_type == "webrtc:answer":
+        await WebRTCSignalingService.handle_answer(room, client_id, payload)
+    elif event_type == "webrtc:ice_candidate":
+        await WebRTCSignalingService.handle_ice_candidate(room, client_id, payload)
+
+    # Knock decision
+    elif event_type == "room:knock_decision":
+        if is_host:
+            target_cid = payload.get("client_id")
+            decision = payload.get("decision")
+            await room_manager.decide_knock(room, target_cid, decision)
+
+    # Telemetry report
+    elif event_type == "telemetry:submit":
+        report = TelemetryReport(
+            client_id=client_id,
+            websocket_rtt_ms=float(payload.get("websocket_rtt_ms", 0.0)),
+            webrtc_audio_rtt_ms=float(payload.get("webrtc_audio_rtt_ms", 0.0)),
+            segment_download_mbps=float(payload.get("segment_download_mbps", 0.0)),
+            buffer_health_sec=float(payload.get("buffer_health_sec", 0.0)),
+            dropped_frames=int(payload.get("dropped_frames", 0)),
+            sync_drift_ms=float(payload.get("sync_drift_ms", 0.0))
+        )
+        telemetry_service.record_report(room.room_id, report)
+        await telemetry_service.broadcast_diagnostics(room)
+
+    return {"status": "ok"}
+
+@router.get("/{room_id}/sync-snapshot")
+async def get_room_sync_snapshot(room_id: str, client_id: str, token: str):
+    """
+    Retrieve full initial room state snapshot upon subscribing to Pusher.
+    """
+    room = room_manager.get_room(room_id)
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+
+    if not room_manager.validate_session(room_id, client_id, token):
+        raise HTTPException(status_code=401, detail="Invalid session token")
+
+    participant = room.participants.get(client_id)
+    is_host = participant.is_host if participant else False
+    current_video_pos = room.calculate_current_video_position()
+
+    snapshot = {
+        "room_id": room.room_id,
+        "is_host": is_host,
+        "settings": {
+            "access_mode": room.settings.access_mode,
+            "control_policy": room.settings.control_policy,
+            "media_mode": room.settings.media_mode,
+            "stream_url": room.settings.stream_url,
+            "web_url": room.settings.web_url,
+            "diagnostics_enabled": room.settings.diagnostics_enabled
+        },
+        "video_state": {
+            "status": room.video_state.status,
+            "reference_position": current_video_pos,
+            "reference_timestamp": room.video_state.reference_timestamp,
+            "playback_rate": room.video_state.playback_rate,
+            "active_subtitle_track": room.video_state.active_subtitle_track,
+            "active_audio_track": room.video_state.active_audio_track
+        },
+        "web_state": {
+            "current_url": room.web_state.current_url,
+            "scroll_top_pct": room.web_state.scroll_top_pct,
+            "scroll_left_pct": room.web_state.scroll_left_pct
+        },
+        "participants": [p.model_dump() for p in room.participants.values()]
+    }
+
+    # Notify others via Pusher that user joined
+    if participant:
+        await pusher_service.trigger(f"room-{room_id}", "room:user_joined", {
+            "event": "room:user_joined",
+            "payload": participant.model_dump(),
+            "timestamp": time.time()
+        })
+
+    return {
+        "event": "room:joined",
+        "payload": snapshot,
+        "timestamp": time.time()
     }

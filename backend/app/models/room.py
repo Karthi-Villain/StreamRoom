@@ -130,6 +130,17 @@ class ActiveRoom:
                 except Exception:
                     pass
 
+        # Broadcast to Pusher Channels
+        try:
+            from app.services.pusher_service import pusher_service
+            event_name = message.event.value if hasattr(message.event, "value") else str(message.event)
+            data = message.model_dump()
+            if exclude_client_id:
+                data["_exclude_client_id"] = exclude_client_id
+            await pusher_service.trigger(f"room-{self.room_id}", event_name, data)
+        except Exception as e:
+            pass
+
     async def send_to(self, client_id: str, message: WSMessage):
         ws = self.connections.get(client_id)
         if ws:
@@ -137,3 +148,13 @@ class ActiveRoom:
                 await ws.send_text(message.model_dump_json())
             except Exception:
                 pass
+
+        # Send via Pusher Channels targeted to recipient client_id
+        try:
+            from app.services.pusher_service import pusher_service
+            event_name = message.event.value if hasattr(message.event, "value") else str(message.event)
+            data = message.model_dump()
+            data["_target_client_id"] = client_id
+            await pusher_service.trigger(f"room-{self.room_id}", event_name, data)
+        except Exception:
+            pass

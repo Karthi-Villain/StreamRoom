@@ -21,4 +21,10 @@ class Settings(BaseModel):
     MAX_VOICE_PEERS_DEFAULT: int = int(os.getenv("MAX_VOICE_PEERS_DEFAULT", "12"))
     PROXY_TIMEOUT_SECONDS: float = float(os.getenv("PROXY_TIMEOUT_SECONDS", "12.0"))
 
+    # Pusher Channels Configuration
+    PUSHER_APP_ID: str = os.getenv("PUSHER_APP_ID", "2204792")
+    PUSHER_KEY: str = os.getenv("PUSHER_KEY", "c9dab135f75f180bf373")
+    PUSHER_SECRET: str = os.getenv("PUSHER_SECRET", "5003e24c0ba031fe8ee6")
+    PUSHER_CLUSTER: str = os.getenv("PUSHER_CLUSTER", "ap2")
+
 settings = Settings()

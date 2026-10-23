@@ -115,3 +115,38 @@ export async function resumeSession(
   }
   return resp.json();
 }
+
+export async function sendRoomEvent(
+  roomId: string,
+  clientId: string,
+  token: string,
+  event: string,
+  payload: any,
+  socketId?: string
+) {
+  const resp = await fetch(`${API_BASE}/rooms/${roomId}/events`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      event,
+      payload,
+      client_id: clientId,
+      token,
+      socket_id: socketId,
+    }),
+  });
+  if (!resp.ok) {
+    return { status: "error" };
+  }
+  return resp.json();
+}
+
+export async function getRoomSyncSnapshot(roomId: string, clientId: string, token: string) {
+  const resp = await fetch(
+    `${API_BASE}/rooms/${roomId}/sync-snapshot?client_id=${encodeURIComponent(clientId)}&token=${encodeURIComponent(token)}`
+  );
+  if (!resp.ok) {
+    throw new Error("Failed to fetch sync snapshot");
+  }
+  return resp.json();
+}

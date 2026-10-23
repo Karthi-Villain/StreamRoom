@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import Pusher from "pusher-js";
 import { WSMessage } from "../types/websocket";
+import { sendRoomEvent, getRoomSyncSnapshot } from "../services/apiClient";
 
 interface UseWebSocketProps {
   roomId: string | null;
@@ -8,40 +10,15 @@ interface UseWebSocketProps {
   onMessage: (message: WSMessage) => void;
 }
 
-const MAX_RETRIES = 10;
-
-/**
- * Resolve the WebSocket base URL.
- *
- * Never falls back to localhost in a deployed build: when VITE_WS_BASE_URL is
- * missing, the URL is derived from the page origin (which is also where the
- * .htaccess WebSocket reverse proxy lives).
- */
-function resolveWsBase(): string {
-  const configured = (import.meta.env.VITE_WS_BASE_URL as string | undefined)?.trim();
-
-  let base: string;
-  if (configured) {
-    base = configured;
-  } else {
-    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-    base = `${proto}//${window.location.host}/ws/rooms`;
-  }
-
-  // Never downgrade to ws:// on an HTTPS page (browsers block mixed content)
-  if (window.location.protocol === "https:" && base.startsWith("ws://")) {
-    base = base.replace(/^ws:\/\//, "wss://");
-  }
-  // A trailing slash would produce "//rooms"
-  return base.replace(/\/+$/, "");
-}
+const PUSHER_KEY =
+  (import.meta.env.VITE_PUSHER_KEY as string | undefined)?.trim() || "c9dab135f75f180bf373";
+const PUSHER_CLUSTER =
+  (import.meta.env.VITE_PUSHER_CLUSTER as string | undefined)?.trim() || "ap2";
 
 export function useWebSocket({ roomId, clientId, token, onMessage }: UseWebSocketProps) {
   const [isConnected, setIsConnected] = useState(false);
-  const wsRef = useRef<WebSocket | null>(null);
+  const pusherRef = useRef<Pusher | null>(null);
   const onMessageRef = useRef(onMessage);
-  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const retryCountRef = useRef(0);
 
   useEffect(() => {
     onMessageRef.current = onMessage;
@@ -51,96 +28,125 @@ export function useWebSocket({ roomId, clientId, token, onMessage }: UseWebSocke
     if (!roomId || !clientId || !token) return;
 
     let isDisposed = false;
-    retryCountRef.current = 0;
 
-    const connect = () => {
+    // Initialize Pusher Client for real-time messaging
+    const pusher = new Pusher(PUSHER_KEY, {
+      cluster: PUSHER_CLUSTER,
+      forceTLS: true,
+    });
+    pusherRef.current = pusher;
+
+    const channelName = `room-${roomId}`;
+    const channel = pusher.subscribe(channelName);
+
+    // Global listener for all room events broadcasted on this channel
+    channel.bind_global((eventName: string, data: any) => {
       if (isDisposed) return;
-
-      const wsUrl =
-        `${resolveWsBase()}/${encodeURIComponent(roomId)}` +
-        `?token=${encodeURIComponent(token)}&client_id=${encodeURIComponent(clientId)}`;
-
-      let ws: WebSocket;
-      try {
-        ws = new WebSocket(wsUrl);
-      } catch (err) {
-        console.error("WebSocket URL rejected by the browser:", wsUrl, err);
+      if (eventName.startsWith("pusher:") || eventName.startsWith("pusher_internal:")) {
         return;
       }
-      wsRef.current = ws;
 
-      ws.onopen = () => {
-        setIsConnected(true);
-        retryCountRef.current = 0;
-      };
-
-      ws.onmessage = (event) => {
+      let msg = data;
+      if (typeof msg === "string") {
         try {
-          const msg: WSMessage = JSON.parse(event.data);
-          if (onMessageRef.current) {
-            onMessageRef.current(msg);
-          }
-        } catch (err) {
-          console.error("Failed to parse WebSocket message", err);
+          msg = JSON.parse(msg);
+        } catch {
+          // not json
         }
+      }
+
+      if (!msg || typeof msg !== "object") return;
+
+      // Filter out if this broadcast excluded our clientId
+      if (msg._exclude_client_id && msg._exclude_client_id === clientId) {
+        return;
+      }
+
+      // Filter out if targeted specifically to another client
+      if (msg._target_client_id && msg._target_client_id !== clientId) {
+        return;
+      }
+
+      // Ensure proper WSMessage shape
+      const formattedMsg: WSMessage = {
+        event: (msg.event as any) || eventName,
+        payload: msg.payload !== undefined ? msg.payload : msg,
+        timestamp: msg.timestamp || Date.now() / 1000,
       };
 
-      ws.onclose = (event) => {
-        setIsConnected(false);
-        if (wsRef.current === ws) wsRef.current = null;
+      if (onMessageRef.current) {
+        onMessageRef.current(formattedMsg);
+      }
+    });
 
-        // 1008 = policy violation (unknown room / expired token)
-        // 1006 = abnormal closure (handshake rejected / proxy not configured)
-        const reason = event.reason ? ` reason="${event.reason}"` : "";
-        console.warn(
-          `WebSocket closed (code=${event.code}${reason} wasClean=${event.wasClean}) from ${wsUrl}`
-        );
+    channel.bind("pusher:subscription_succeeded", async () => {
+      if (isDisposed) return;
+      setIsConnected(true);
 
-        if (isDisposed) return;
-
-        if (retryCountRef.current >= MAX_RETRIES) {
-          console.error(
-            "WebSocket reconnect attempts exhausted. Verify that /ws/ is proxied to the ASGI server."
-          );
-          return;
+      // Fetch snapshot to get initial room state, host status, and existing participants
+      try {
+        const snapshot = await getRoomSyncSnapshot(roomId, clientId, token);
+        if (snapshot && !isDisposed && onMessageRef.current) {
+          onMessageRef.current(snapshot);
         }
+      } catch (err) {
+        console.error("Failed to fetch initial sync snapshot:", err);
+      }
+    });
 
-        // 1008 = stale credentials: back off harder instead of hammering the
-        // server with a token that is being rejected.
-        const backoff =
-          event.code === 1008
-            ? 10000
-            : Math.min(800 * Math.pow(1.6, retryCountRef.current), 8000);
+    channel.bind("pusher:subscription_error", (status: any) => {
+      console.warn("Pusher subscription error:", status);
+    });
 
-        retryCountRef.current += 1;
-        reconnectTimeoutRef.current = setTimeout(connect, backoff + Math.random() * 400);
-      };
+    pusher.connection.bind("connected", () => {
+      if (!isDisposed) setIsConnected(true);
+    });
 
-      ws.onerror = () => {
-        // Browsers hide error details; onclose carries the close code.
-        console.warn(`WebSocket transport error for ${wsUrl}`);
-        setIsConnected(false);
-      };
-    };
+    pusher.connection.bind("disconnected", () => {
+      if (!isDisposed) setIsConnected(false);
+    });
 
-    connect();
+    pusher.connection.bind("unavailable", () => {
+      if (!isDisposed) setIsConnected(false);
+    });
+
+    pusher.connection.bind("failed", () => {
+      if (!isDisposed) setIsConnected(false);
+    });
 
     return () => {
       isDisposed = true;
-      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
-      if (wsRef.current) {
-        wsRef.current.onclose = null;
-        wsRef.current.close();
-        wsRef.current = null;
+      try {
+        channel.unbind_all();
+        pusher.unsubscribe(channelName);
+        pusher.disconnect();
+      } catch {
+        // ignore
       }
+      pusherRef.current = null;
+      setIsConnected(false);
     };
   }, [roomId, clientId, token]);
 
-  const sendMessage = useCallback((msg: WSMessage) => {
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify(msg));
-    }
-  }, []);
+  const sendMessage = useCallback(
+    (msg: WSMessage) => {
+      if (!roomId || !clientId || !token) return;
+
+      const socketId = pusherRef.current?.connection?.socket_id;
+      sendRoomEvent(roomId, clientId, token, msg.event, msg.payload, socketId)
+        .then((resp) => {
+          // If server returned an immediate synchronous response (e.g. time:pong), dispatch it
+          if (resp && resp.event && onMessageRef.current) {
+            onMessageRef.current(resp);
+          }
+        })
+        .catch((err) => {
+          console.warn("Error sending room event:", err);
+        });
+    },
+    [roomId, clientId, token]
+  );
 
   return { isConnected, sendMessage };
 }
+
