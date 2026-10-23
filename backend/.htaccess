@@ -1,21 +1,13 @@
 # ==============================================================================
-# cPanel Phusion Passenger & Apache Configuration for StreamRoom
-# ==============================================================================
-# This .htaccess handles:
-#   1. Passenger WSGI config for the FastAPI backend
-#   2. Static frontend file serving from /public directory
-#   3. SPA fallback routing for React Router
-#   4. WebSocket upgrade proxying
-#   5. Security headers and file protection
+# cPanel Phusion Passenger & LiteSpeed Configuration for StreamRoom
 # ==============================================================================
 
 <IfModule mod_passenger.c>
     PassengerEnabled on
     PassengerAppType python
     PassengerStartupFile passenger_wsgi.py
-    PassengerAppRoot .
+    PassengerAppRoot /home/plutbfwl/StreamRoom
     PassengerPython /home/plutbfwl/virtualenv/StreamRoom/3.11/bin/python3
-    # Optional: adjust node/python concurrency per hosting limits
     PassengerMinInstances 1
     PassengerMaxRequests 5000
 </IfModule>
@@ -24,46 +16,19 @@
     RewriteEngine On
     RewriteBase /
 
-    # Ensure Authorization headers are passed cleanly through the proxy
+    # Ensure Authorization headers are passed cleanly
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
 
-    # ==========================================================================
-    # REALTIME / API REVERSE PROXY  →  uvicorn ASGI daemon (127.0.0.1:8001)
-    # ==========================================================================
-    # Passenger / LiteSpeed only speak WSGI for Python apps, and WSGI has no
-    # WebSocket support: every `Upgrade: websocket` request is answered with
-    # 403 before FastAPI ever sees it. So /ws/* must be proxied to a real ASGI
-    # server (started with `./realtime.sh start`).
-    #
-    # The HTTP routes are proxied to the SAME process on purpose: the room
-    # state (room_manager) lives in memory, so API + WebSocket traffic must
-    # hit one single process or rooms/tokens appear "not found".
-    #
-    # NOTE: requires mod_proxy (and mod_proxy_wstunnel for the ws:// scheme on
-    # Apache; LiteSpeed handles it natively). Port must match REALTIME_PORT.
-    #
-    # Use a plain http:// proxy target: LiteSpeed rejects the ws:// scheme in
-    # rewrite rules (answers 403), while http:// proxies the Upgrade handshake
-    # correctly on both LiteSpeed and Apache >= 2.4.47. One rule handles both
-    # WebSocket upgrades and normal HTTP requests to /ws/*.
-    RewriteRule ^ws/(.*)$ http://127.0.0.1:8001/ws/$1 [P,L]
+    # Pass API, health, docs routes directly to Phusion Passenger
+    RewriteRule ^(api|health|docs|redoc|openapi\.json)(/.*)?$ - [L]
 
-    # Alternative if your web server supports the ws:// scheme:
-    # RewriteCond %{HTTP:Upgrade} =websocket [NC]
-    # RewriteRule ^ws/(.*)$ ws://127.0.0.1:8001/ws/$1 [P,L]
+    # Serve static assets directly if they exist on disk
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [L]
 
-    # Plain HTTP traffic to the same ASGI process (shared in-memory state)
-    RewriteRule ^(api|health|docs|redoc|openapi\.json)(/.*)?$ http://127.0.0.1:8001/$1$2 [P,L]
-
-    # --- Frontend SPA: Serve static files or fallback to index.html ---
-    # If the requested file exists in /public, serve it
-    RewriteCond %{DOCUMENT_ROOT}/public%{REQUEST_URI} -f
-    RewriteRule ^(.*)$ /public/$1 [L]
-
-    # If not an API route and not a real file, serve the SPA index.html
-    RewriteCond %{REQUEST_FILENAME} !-f
-    RewriteCond %{REQUEST_FILENAME} !-d
-    RewriteRule ^(.*)$ /public/index.html [L]
+    # Fallback SPA routing: serve index.html for frontend routes
+    RewriteRule ^ index.html [L]
 </IfModule>
 
 # Security Headers
@@ -76,16 +41,26 @@
     Header set Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With"
 </IfModule>
 
+# Prevent caching of index.html so users always get the newest JS/CSS bundle
+<FilesMatch "\.(html|htm)$">
+    <IfModule mod_headers.c>
+        Header set Cache-Control "no-cache, no-store, must-revalidate"
+        Header set Pragma "no-cache"
+        Header set Expires "0"
+    </IfModule>
+</FilesMatch>
+
 # Protect database and environment files from direct HTTP access
 <FilesMatch "^(\.env|\.db|streamroom\.db|passenger_wsgi\.py|run\.py|requirements\.txt)$">
     Order allow,deny
     Deny from all
 </FilesMatch>
 
-# Cache static assets aggressively
+# Cache hashed static assets safely
 <IfModule mod_expires.c>
     ExpiresActive On
     ExpiresByType text/css "access plus 1 year"
     ExpiresByType application/javascript "access plus 1 year"
     ExpiresByType image/svg+xml "access plus 1 year"
 </IfModule>
+
