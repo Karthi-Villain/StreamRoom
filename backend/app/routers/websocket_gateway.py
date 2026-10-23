@@ -1,6 +1,6 @@
 import json
 import time
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query, status
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
 
 from app.services.room_manager import room_manager
 from app.services.sync_engine import SyncEngine
@@ -12,35 +12,48 @@ from app.models.events import WSMessage, WSEventType
 ws_router = APIRouter(tags=["WebSocket Gateway"])
 
 @ws_router.websocket("/ws/rooms/{room_id}")
-async def room_websocket_endpoint(
-    websocket: WebSocket,
-    room_id: str,
-    token: str = Query(...),
-    client_id: str = Query(...)
-):
-    room = room_manager.get_room(room_id)
+async def room_websocket_endpoint(websocket: WebSocket, room_id: str):
+    """
+    Room signaling socket.
 
-    # NOTE: accept() before rejecting. Closing before the handshake makes
-    # Starlette answer with a bare HTTP 403, which the browser surfaces as an
-    # opaque "error" + close code 1006 - indistinguishable from a broken
-    # reverse proxy. Accepting first lets us send a real close code/reason.
-    if not room or not room_manager.validate_session(room_id, client_id, token):
-        await websocket.accept()
-        await websocket.send_text(WSMessage(
-            event=WSEventType.ROOM_ERROR,
-            payload={
-                "code": "ROOM_NOT_FOUND" if not room else "INVALID_SESSION",
-                "message": "Room not found or expired" if not room else "Session token is invalid or expired",
-            },
-            timestamp=time.time()
-        ).model_dump_json())
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="auth_failed")
-        return
+    Credentials are read straight from the query string instead of using
+    `token: str = Query(...)`: a missing/invalid query parameter makes FastAPI
+    reject the *handshake* with a bare HTTP 403 (uvicorn logs
+    `connection rejected (403 Forbidden)`), which browsers surface as an opaque
+    error + close code 1006. We always accept() first so every failure is
+    reported as a close code + `room:error` message instead.
+    """
+    token = websocket.query_params.get("token")
+    client_id = websocket.query_params.get("client_id")
 
     await websocket.accept(headers=[
         (b"x-accel-buffering", b"no"),
         (b"cache-control", b"no-cache")
     ])
+
+    async def reject(code: str, message: str) -> None:
+        await websocket.send_text(WSMessage(
+            event=WSEventType.ROOM_ERROR,
+            payload={"code": code, "message": message},
+            timestamp=time.time()
+        ).model_dump_json())
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=code.lower())
+
+    if not token or not client_id:
+        await reject(
+            "MISSING_CREDENTIALS",
+            "WebSocket URL must include the token and client_id query parameters",
+        )
+        return
+
+    room = room_manager.get_room(room_id)
+    if not room:
+        await reject("ROOM_NOT_FOUND", "Room not found or expired")
+        return
+
+    if not room_manager.validate_session(room_id, client_id, token):
+        await reject("INVALID_SESSION", "Session token is invalid or expired")
+        return
 
     # Register connection
     async with room.lock:
