@@ -1,5 +1,12 @@
 # ==============================================================================
-# cPanel Phusion Passenger & Apache Configuration for StreamRoom Backend
+# cPanel Phusion Passenger & Apache Configuration for StreamRoom
+# ==============================================================================
+# This .htaccess handles:
+#   1. Passenger WSGI config for the FastAPI backend
+#   2. Static frontend file serving from /public directory
+#   3. SPA fallback routing for React Router
+#   4. WebSocket upgrade proxying
+#   5. Security headers and file protection
 # ==============================================================================
 
 <IfModule mod_passenger.c>
@@ -7,7 +14,7 @@
     PassengerAppType python
     PassengerStartupFile passenger_wsgi.py
     PassengerAppRoot .
-    PassengerPython /usr/bin/python3
+    PassengerPython /home/plutbfwl/virtualenv/StreamRoom/3.11/bin/python3
     # Optional: adjust node/python concurrency per hosting limits
     PassengerMinInstances 1
     PassengerMaxRequests 5000
@@ -24,6 +31,25 @@
     RewriteCond %{HTTP:Upgrade} =websocket [NC]
     RewriteCond %{HTTP:Connection} upgrade [NC]
     RewriteRule ^ws/(.*) ws://127.0.0.1:8000/ws/$1 [P,L]
+
+    # --- Backend API Routes: Let Passenger handle these ---
+    # /api/* and /health and /docs and /redoc and /openapi.json
+    RewriteRule ^api/ - [L]
+    RewriteRule ^health$ - [L]
+    RewriteRule ^docs$ - [L]
+    RewriteRule ^redoc$ - [L]
+    RewriteRule ^openapi.json$ - [L]
+    RewriteRule ^ws/ - [L]
+
+    # --- Frontend SPA: Serve static files or fallback to index.html ---
+    # If the requested file exists in /public, serve it
+    RewriteCond %{DOCUMENT_ROOT}/public%{REQUEST_URI} -f
+    RewriteRule ^(.*)$ /public/$1 [L]
+
+    # If not an API route and not a real file, serve the SPA index.html
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^(.*)$ /public/index.html [L]
 </IfModule>
 
 # Security Headers
@@ -37,7 +63,15 @@
 </IfModule>
 
 # Protect database and environment files from direct HTTP access
-<FilesMatch "^(\.env|\.db|streamroom\.db)$">
+<FilesMatch "^(\.env|\.db|streamroom\.db|passenger_wsgi\.py|run\.py|requirements\.txt)$">
     Order allow,deny
     Deny from all
 </FilesMatch>
+
+# Cache static assets aggressively
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType text/css "access plus 1 year"
+    ExpiresByType application/javascript "access plus 1 year"
+    ExpiresByType image/svg+xml "access plus 1 year"
+</IfModule>

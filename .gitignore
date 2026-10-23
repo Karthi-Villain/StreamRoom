@@ -7,6 +7,7 @@ node_modules/
 dist/
 dist-ssr/
 build/
+!backend/public/
 
 # Python & Virtual Environments
 __pycache__/
