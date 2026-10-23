@@ -107,6 +107,9 @@ The backend includes ready-to-use cPanel files:
   **Required for WebSockets** — WSGI (Passenger/LiteSpeed) cannot carry the
   WebSocket protocol, so `/ws/` (and `/api/`) are reverse-proxied to it.
 - **`.htaccess`:** Proxy rules for `/ws/`, `/api/`, `/health`, `/docs`.
+- **`cloudflared.sh`:** Cloudflare Tunnel that terminates WebSockets directly on
+  uvicorn (`wss://ws.sparkxapps.in`), because LiteSpeed cannot tunnel the
+  WebSocket upgrade.
 - Start with `./realtime.sh start`, check with `./realtime.sh status`.
 - For complete step-by-step instructions, see the [cPanel Deployment Guide](CPANEL_DEPLOYMENT.md).
 

@@ -186,40 +186,81 @@ curl -i --max-time 10 \
   -H "Connection: Upgrade" -H "Upgrade: websocket" \
   -H "Sec-WebSocket-Version: 13" \
   -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" \
-  "https://room.sparkxapps.in/ws/rooms/<ROOM_ID>?token=<SESSION_TOKEN>&client_id=<CLIENT_ID>"
+  "https://ws.sparkxapps.in/ws/rooms/<ROOM_ID>?token=<SESSION_TOKEN>&client_id=<CLIENT_ID>"
 ```
 
 * `HTTP/1.1 101 Switching Protocols` → working. ✅
-* `403` with an **empty** body and no `x-turbo-charged-by` header → the request
-  never reached uvicorn. On LiteSpeed this happens when the proxy target uses
-  the `ws://` scheme (it is not supported in rewrite rules). Use the `http://`
-  target instead — the web server tunnels the upgrade automatically:
-  ```apache
-  RewriteRule ^ws/(.*)$ http://127.0.0.1:8001/ws/$1 [P,L]
-  ```
 * `403` with a JSON body / `1008` close → the app rejected the credentials
   (unknown room or expired `session_token`).
 * `404 {"detail":"Not Found"}` on a plain (non-upgrade) `/ws/...` request is
-  **normal** and proves the proxy is reaching uvicorn.
+  **normal** and proves the request reaches uvicorn.
 
-### If `[P]` (proxy) is blocked by the host
-Some shared hosts disable `mod_proxy` / `ProxyPass` in `.htaccess` (you will
-see `500 Internal Server Error` or `403` on `/ws/`). If so, either:
+### ⚠️ WebSocket transport must be the Cloudflare Tunnel (LiteSpeed limitation)
 
-1. Ask support to enable `mod_proxy`, `mod_proxy_http` and `mod_proxy_wstunnel`,
-   or to add this to the vhost:
-   ```apache
-   ProxyPreserveHost On
-   ProxyPass        /ws/  ws://127.0.0.1:8001/ws/
-   ProxyPassReverse /ws/  ws://127.0.0.1:8001/ws/
-   ```
-2. Or host the signaling server where WebSockets are supported (small VPS /
-   Render / Railway / Fly.io) and point the frontend at it:
-   ```env
-   VITE_WS_BASE_URL="wss://signaling.example.com/ws/rooms"
-   VITE_API_BASE_URL="https://signaling.example.com/api/v1"
-   ```
-   then rebuild the frontend.
+Measured on this host: with the `.htaccess` reverse proxy the handshake reaches
+uvicorn (`INFO: WebSocket /ws/rooms/... [accepted]`, `connection open`), but the
+101 response is **never returned to the client** — LiteSpeed buffers the
+upgraded response instead of tunnelling it. Clients therefore hang and close
+with `1006`. `RewriteRule ... [P]` (and `ws://` targets) cannot proxy
+WebSockets here.
+
+Solution: expose the ASGI process through a Cloudflare Tunnel, which connects
+**outbound** from the server to Cloudflare and terminates directly on
+`127.0.0.1:8001`.
+
+```bash
+# 1) install (no root required)
+mkdir -p ~/bin ~/logs
+curl -L -o ~/bin/cloudflared \
+  https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
+chmod +x ~/bin/cloudflared && ~/bin/cloudflared --version
+
+# 2) one-time auth (prints a URL, open it and pick the sparkxapps.in zone)
+~/bin/cloudflared tunnel login
+
+# 3) create the tunnel + DNS record
+~/bin/cloudflared tunnel create streamroom
+~/bin/cloudflared tunnel route dns streamroom ws.sparkxapps.in
+
+# 4) run it (managed by cloudflared.sh)
+cd ~/StreamRoom && ./cloudflared.sh start && ./cloudflared.sh status
+```
+
+Keep it alive with cron (same pattern as the ASGI server):
+
+```cron
+@reboot /home/plutbfwl/StreamRoom/cloudflared.sh start >/dev/null 2>&1
+*/5 * * * * /home/plutbfwl/StreamRoom/cloudflared.sh start >/dev/null 2>&1
+```
+
+Then build the frontend with `VITE_WS_BASE_URL="wss://ws.sparkxapps.in/ws/rooms"`
+(it is already the value in `frontend/.env.production`) and deploy `public/`.
+
+REST (`/api/`, `/health`, `/docs`) can keep using the `.htaccess` proxy — it is
+plain HTTP and works — both paths land on the same uvicorn process, so room
+state stays consistent.
+
+#### Alternative: ask the host to tunnel in the vhost
+Support can add this to the `room.sparkxapps.in` vhost (ProxyPass is not
+allowed inside `.htaccess`):
+
+```apache
+ProxyPreserveHost On
+ProxyPass        /ws/  ws://127.0.0.1:8001/ws/
+ProxyPassReverse /ws/  ws://127.0.0.1:8001/ws/
+```
+
+#### Alternative: host the signaling server elsewhere
+If neither a tunnel nor a vhost change is possible, run the backend on a host
+that supports WebSockets (small VPS / Render / Railway / Fly.io) and point the
+frontend at it:
+
+```env
+VITE_WS_BASE_URL="wss://signaling.example.com/ws/rooms"
+VITE_API_BASE_URL="https://signaling.example.com/api/v1"
+```
+
+then rebuild the frontend (`npm run build`).
 
 ### Cloudflare
 Cloudflare proxies WebSockets on all plans, so nothing to change there. Idle
