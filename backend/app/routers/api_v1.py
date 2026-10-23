@@ -89,6 +89,8 @@ async def get_room_status(room_id: str):
         "requires_approval": room.settings.access_mode == AccessMode.APPROVAL,
         "media_mode": room.settings.media_mode,
         "stream_configured": bool(room.settings.stream_url or room.settings.web_url),
+        "stream_url": room.settings.stream_url,
+        "web_url": room.settings.web_url,
         "participants_count": len(room.participants)
     }
 

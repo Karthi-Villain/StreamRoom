@@ -63,5 +63,7 @@ export interface RoomMetadata {
   requires_approval: boolean;
   media_mode: MediaMode;
   stream_configured: boolean;
+  stream_url?: string;
+  web_url?: string;
   participants_count: number;
 }

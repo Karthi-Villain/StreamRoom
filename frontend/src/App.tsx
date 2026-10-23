@@ -164,7 +164,17 @@ export const App: React.FC = () => {
     if (rId && rId.length === 12) {
       setRoomId(rId);
       getRoomMetadata(rId)
-        .then(setMetadata)
+        .then((meta) => {
+          setMetadata(meta);
+          if (meta && (meta.stream_url || meta.web_url)) {
+            setRoomSettings((prev) => ({
+              ...prev,
+              stream_url: meta.stream_url || prev.stream_url,
+              web_url: meta.web_url || prev.web_url,
+              media_mode: meta.media_mode || prev.media_mode,
+            }));
+          }
+        })
         .catch(() => setMetadata(null));
     }
   }, []);
@@ -190,6 +200,15 @@ export const App: React.FC = () => {
           setIsHost(Boolean(res.is_host));
           if (res.host_token) setHostToken(res.host_token);
           setIsPendingApproval(false);
+
+          if (res.settings) {
+            setRoomSettings((prev) => ({
+              ...prev,
+              ...res.settings,
+              stream_url: res.settings.stream_url ?? prev.stream_url,
+              web_url: res.settings.web_url ?? prev.web_url,
+            }));
+          }
 
           // Update persistent store
           saveRoomSession({

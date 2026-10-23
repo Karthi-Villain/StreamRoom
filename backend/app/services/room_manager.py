@@ -254,13 +254,23 @@ class RoomManager:
                 )
                 self._persist_session_token_to_db(room_id, client_id, host_display_name, new_session_token, True)
 
+                settings_payload = {
+                    "access_mode": room.settings.access_mode,
+                    "control_policy": room.settings.control_policy,
+                    "media_mode": room.settings.media_mode,
+                    "stream_url": room.settings.stream_url,
+                    "web_url": room.settings.web_url,
+                    "diagnostics_enabled": room.settings.diagnostics_enabled
+                }
+
                 return {
                     "status": "approved",
                     "is_host": True,
                     "display_name": host_display_name,
                     "session_token": new_session_token,
                     "host_token": room.host_token,
-                    "room_id": room_id
+                    "room_id": room_id,
+                    "settings": settings_payload
                 }
 
             # Check 2: Returning regular participant with existing valid token in DB
@@ -283,7 +293,15 @@ class RoomManager:
                         "is_host": st.is_host,
                         "display_name": st.display_name,
                         "session_token": session_token,
-                        "room_id": room_id
+                        "room_id": room_id,
+                        "settings": {
+                            "access_mode": room.settings.access_mode,
+                            "control_policy": room.settings.control_policy,
+                            "media_mode": room.settings.media_mode,
+                            "stream_url": room.settings.stream_url,
+                            "web_url": room.settings.web_url,
+                            "diagnostics_enabled": room.settings.diagnostics_enabled
+                        }
                     }
 
             # Check 3: Check by client ID if session exists
@@ -305,7 +323,15 @@ class RoomManager:
                     "is_host": st_by_client.is_host,
                     "display_name": st_by_client.display_name,
                     "session_token": st_by_client.token,
-                    "room_id": room_id
+                    "room_id": room_id,
+                    "settings": {
+                        "access_mode": room.settings.access_mode,
+                        "control_policy": room.settings.control_policy,
+                        "media_mode": room.settings.media_mode,
+                        "stream_url": room.settings.stream_url,
+                        "web_url": room.settings.web_url,
+                        "diagnostics_enabled": room.settings.diagnostics_enabled
+                    }
                 }
 
             return {"status": "needs_join"}
