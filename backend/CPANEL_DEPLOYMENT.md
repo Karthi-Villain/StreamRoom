@@ -190,11 +190,17 @@ curl -i --max-time 10 \
 ```
 
 * `HTTP/1.1 101 Switching Protocols` → working. ✅
-* `403` with an **empty** body → the request never reached uvicorn: the proxy
-  rules are not active (wrong `.htaccess`, `mod_proxy` disabled, or the daemon
-  is not listening on the port in the rule).
+* `403` with an **empty** body and no `x-turbo-charged-by` header → the request
+  never reached uvicorn. On LiteSpeed this happens when the proxy target uses
+  the `ws://` scheme (it is not supported in rewrite rules). Use the `http://`
+  target instead — the web server tunnels the upgrade automatically:
+  ```apache
+  RewriteRule ^ws/(.*)$ http://127.0.0.1:8001/ws/$1 [P,L]
+  ```
 * `403` with a JSON body / `1008` close → the app rejected the credentials
   (unknown room or expired `session_token`).
+* `404 {"detail":"Not Found"}` on a plain (non-upgrade) `/ws/...` request is
+  **normal** and proves the proxy is reaching uvicorn.
 
 ### If `[P]` (proxy) is blocked by the host
 Some shared hosts disable `mod_proxy` / `ProxyPass` in `.htaccess` (you will
