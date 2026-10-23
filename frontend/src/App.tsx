@@ -246,6 +246,9 @@ export const App: React.FC = () => {
 
     if (event === "time:pong") {
       handleTimePong(payload);
+    } else if (event === "room:error") {
+      // The signaling server refused the session (unknown room / expired token)
+      console.warn("Signaling server rejected the session:", payload);
     } else if (event === "room:joined") {
       setIsHost(payload.is_host);
       setRoomSettings(payload.settings);

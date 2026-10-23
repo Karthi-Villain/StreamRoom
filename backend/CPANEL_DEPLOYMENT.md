@@ -116,8 +116,107 @@ https://api.yourdomain.com/docs
 
 ---
 
-## ⚡ WebSocket Notes on cPanel / Apache
+## ⚡ WebSockets on cPanel — **must read**
 
-- StreamRoom uses WebSockets at `/ws/{room_id}` for millisecond video synchronization, live chat, and WebRTC signaling.
-- The included `.htaccess` file contains rewrite rules that upgrade `ws://` and `wss://` headers.
-- If your shared host blocks persistent WebSocket connections through Passenger, you can also run Uvicorn as a background daemon process (via Cron or Supervisor/PM2) on a local port (e.g. `8000`) and reverse-proxy to it via `.htaccess`.
+### Why WebSockets fail on plain cPanel Python apps
+cPanel's *Setup Python App* runs Python through a **WSGI** adapter (Phusion
+Passenger or LiteSpeed's `lswsgi`). WSGI has **no WebSocket support** — the
+`Upgrade: websocket` handshake is rejected by the web server before FastAPI
+runs (you get `HTTP 403` with an empty body, and the browser reports
+`WebSocket connection ... error` / close code `1006`).
+
+Wrapping FastAPI with `a2wsgi.ASGIMiddleware` does **not** fix this: that
+bridge only converts HTTP requests.
+
+**Symptoms you will see if this is not set up:**
+
+```text
+WebSocket connection attempt encountered error, attempting recovery: Event {...}
+```
+…repeating every few seconds, while the REST API (`/api/v1/...`) works fine.
+
+### The fix: run uvicorn on a loopback port and proxy to it
+1. `realtime_server.py` starts the **real ASGI server** (uvicorn) on
+   `127.0.0.1:8001`.
+2. `.htaccess` reverse-proxies `/ws/*` **and** `/api/*`, `/health`, `/docs`,
+   `/redoc`, `/openapi.json` to that process.
+3. All dynamic traffic therefore hits **one** process, so the in-memory
+   `room_manager` state (rooms, tokens, playback state) is shared between REST
+   calls and WebSocket connections.
+
+> ⚠️ Proxying only `/ws/` while leaving `/api/` on Passenger is **not** a valid
+> setup: rooms would be created in one process and the WebSocket would be
+> rejected in another (`Room not found or expired`).
+
+> 📁 The proxy rules live in the `.htaccess` of the **document root** of
+> `room.sparkxapps.in` (the folder that also contains `index.html` / `public/`).
+> In the current setup that is `/home/plutbfwl/StreamRoom/.htaccess`. If the
+> domain points somewhere else (`~/public_html`, `~/room.sparkxapps.in`, ...),
+> copy the same `.htaccess` there as well.
+
+### Start / manage the realtime server
+
+```bash
+cd /home/plutbfwl/StreamRoom
+./realtime.sh start      # start (idempotent)
+./realtime.sh status     # health check
+./realtime.sh restart    # after code changes
+./realtime.sh logs       # tail -f logs/realtime.log
+```
+
+Verify locally on the server:
+
+```bash
+curl -i http://127.0.0.1:8001/health
+```
+
+Keep it alive after reboots / crashes with a cron job (cPanel → **Cron Jobs**):
+
+```cron
+@reboot /home/plutbfwl/StreamRoom/realtime.sh start >/dev/null 2>&1
+*/5 * * * * /home/plutbfwl/StreamRoom/realtime.sh start >/dev/null 2>&1
+```
+
+(`start` is a no-op when the process is already running.)
+
+### Verify the public WebSocket endpoint
+
+```bash
+curl -i --max-time 10 \
+  -H "Connection: Upgrade" -H "Upgrade: websocket" \
+  -H "Sec-WebSocket-Version: 13" \
+  -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" \
+  "https://room.sparkxapps.in/ws/rooms/<ROOM_ID>?token=<SESSION_TOKEN>&client_id=<CLIENT_ID>"
+```
+
+* `HTTP/1.1 101 Switching Protocols` → working. ✅
+* `403` with an **empty** body → the request never reached uvicorn: the proxy
+  rules are not active (wrong `.htaccess`, `mod_proxy` disabled, or the daemon
+  is not listening on the port in the rule).
+* `403` with a JSON body / `1008` close → the app rejected the credentials
+  (unknown room or expired `session_token`).
+
+### If `[P]` (proxy) is blocked by the host
+Some shared hosts disable `mod_proxy` / `ProxyPass` in `.htaccess` (you will
+see `500 Internal Server Error` or `403` on `/ws/`). If so, either:
+
+1. Ask support to enable `mod_proxy`, `mod_proxy_http` and `mod_proxy_wstunnel`,
+   or to add this to the vhost:
+   ```apache
+   ProxyPreserveHost On
+   ProxyPass        /ws/  ws://127.0.0.1:8001/ws/
+   ProxyPassReverse /ws/  ws://127.0.0.1:8001/ws/
+   ```
+2. Or host the signaling server where WebSockets are supported (small VPS /
+   Render / Railway / Fly.io) and point the frontend at it:
+   ```env
+   VITE_WS_BASE_URL="wss://signaling.example.com/ws/rooms"
+   VITE_API_BASE_URL="https://signaling.example.com/api/v1"
+   ```
+   then rebuild the frontend.
+
+### Cloudflare
+Cloudflare proxies WebSockets on all plans, so nothing to change there. Idle
+connections are dropped after ~100 s — the client already sends a `time:ping`
+every 4 s, which keeps the socket open.
+

@@ -19,13 +19,22 @@ async def room_websocket_endpoint(
     client_id: str = Query(...)
 ):
     room = room_manager.get_room(room_id)
-    if not room:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-        return
 
-    # Validate session token
-    if not room_manager.validate_session(room_id, client_id, token):
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+    # NOTE: accept() before rejecting. Closing before the handshake makes
+    # Starlette answer with a bare HTTP 403, which the browser surfaces as an
+    # opaque "error" + close code 1006 - indistinguishable from a broken
+    # reverse proxy. Accepting first lets us send a real close code/reason.
+    if not room or not room_manager.validate_session(room_id, client_id, token):
+        await websocket.accept()
+        await websocket.send_text(WSMessage(
+            event=WSEventType.ROOM_ERROR,
+            payload={
+                "code": "ROOM_NOT_FOUND" if not room else "INVALID_SESSION",
+                "message": "Room not found or expired" if not room else "Session token is invalid or expired",
+            },
+            timestamp=time.time()
+        ).model_dump_json())
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="auth_failed")
         return
 
     await websocket.accept(headers=[

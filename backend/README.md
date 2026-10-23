@@ -30,7 +30,9 @@ backend/
 │   │   └── websocket_gateway.py# Real-time WebSocket connection hub & state manager
 │   └── main.py                 # FastAPI application lifecycle & router registration
 ├── passenger_wsgi.py           # cPanel Phusion Passenger WSGI/ASGI entrypoint
-├── .htaccess                   # Apache rules for Passenger & WebSocket upgrade proxy
+├── realtime_server.py          # Standalone uvicorn ASGI server (WebSocket capable)
+├── realtime.sh                 # Start/stop/status manager for the realtime server
+├── .htaccess                   # Apache/LiteSpeed rules: proxy /ws/ + /api/ to uvicorn
 ├── CPANEL_DEPLOYMENT.md        # Detailed cPanel hosting deployment guide
 ├── requirements.txt            # Production dependencies (including a2wsgi & gunicorn)
 └── run.py                      # Local development runner
@@ -100,8 +102,12 @@ The server will start at `http://localhost:8000`. OpenAPI documentation is avail
 
 ### Option B: cPanel / Phusion Passenger
 The backend includes ready-to-use cPanel files:
-- **`passenger_wsgi.py`:** Bridges FastAPI ASGI to Passenger WSGI via `a2wsgi`.
-- **`.htaccess`:** Upgrades WebSocket headers and configures Passenger.
+- **`passenger_wsgi.py`:** Bridges FastAPI ASGI to Passenger WSGI via `a2wsgi` (HTTP only).
+- **`realtime_server.py` + `realtime.sh`:** uvicorn ASGI daemon on `127.0.0.1:8001`.
+  **Required for WebSockets** — WSGI (Passenger/LiteSpeed) cannot carry the
+  WebSocket protocol, so `/ws/` (and `/api/`) are reverse-proxied to it.
+- **`.htaccess`:** Proxy rules for `/ws/`, `/api/`, `/health`, `/docs`.
+- Start with `./realtime.sh start`, check with `./realtime.sh status`.
 - For complete step-by-step instructions, see the [cPanel Deployment Guide](CPANEL_DEPLOYMENT.md).
 
 ### Option C: Production Docker / Gunicorn

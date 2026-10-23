@@ -24,22 +24,32 @@
     RewriteEngine On
     RewriteBase /
 
-    # Ensure Authorization headers are passed cleanly through WSGI
+    # Ensure Authorization headers are passed cleanly through the proxy
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
 
-    # WebSocket Proxy Upgrade Support (for /ws/ endpoints)
+    # ==========================================================================
+    # REALTIME / API REVERSE PROXY  →  uvicorn ASGI daemon (127.0.0.1:8001)
+    # ==========================================================================
+    # Passenger / LiteSpeed only speak WSGI for Python apps, and WSGI has no
+    # WebSocket support: every `Upgrade: websocket` request is answered with
+    # 403 before FastAPI ever sees it. So /ws/* must be proxied to a real ASGI
+    # server (started with `./realtime.sh start`).
+    #
+    # The HTTP routes are proxied to the SAME process on purpose: the room
+    # state (room_manager) lives in memory, so API + WebSocket traffic must
+    # hit one single process or rooms/tokens appear "not found".
+    #
+    # NOTE: requires mod_proxy (and mod_proxy_wstunnel for the ws:// scheme on
+    # Apache; LiteSpeed handles it natively). Port must match REALTIME_PORT.
     RewriteCond %{HTTP:Upgrade} =websocket [NC]
-    RewriteCond %{HTTP:Connection} upgrade [NC]
-    RewriteRule ^ws/(.*) ws://127.0.0.1:8000/ws/$1 [P,L]
+    RewriteRule ^ws/(.*)$ ws://127.0.0.1:8001/ws/$1 [P,L]
 
-    # --- Backend API Routes: Let Passenger handle these ---
-    # /api/* and /health and /docs and /redoc and /openapi.json
-    RewriteRule ^api/ - [L]
-    RewriteRule ^health$ - [L]
-    RewriteRule ^docs$ - [L]
-    RewriteRule ^redoc$ - [L]
-    RewriteRule ^openapi.json$ - [L]
-    RewriteRule ^ws/ - [L]
+    # If ws:// is rejected by your web server (500/403), comment the rule above
+    # and enable this one instead - it upgrades the connection over plain HTTP:
+    # RewriteRule ^ws/(.*)$ http://127.0.0.1:8001/ws/$1 [P,L]
+
+    # Plain HTTP traffic to the same ASGI process (shared in-memory state)
+    RewriteRule ^(api|ws|health|docs|redoc|openapi\.json)(/.*)?$ http://127.0.0.1:8001/$1$2 [P,L]
 
     # --- Frontend SPA: Serve static files or fallback to index.html ---
     # If the requested file exists in /public, serve it

@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from app.core.config import settings
 from app.db.database import init_db
@@ -52,13 +52,17 @@ async def health_check():
 # -----------------------------------------------------------------------------
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATIC_CANDIDATES = [
-    "/home/plutbfwl/room.sparkxapps.in",
+    os.getenv("STATIC_DIR", ""),
     os.path.join(BASE_DIR, "public"),
     os.path.join(os.getcwd(), "public"),
 ]
 
 STATIC_DIR = next(
-    (d for d in STATIC_CANDIDATES if os.path.isdir(d) and os.path.exists(os.path.join(d, "index.html"))),
+    (
+        d
+        for d in STATIC_CANDIDATES
+        if d and os.path.isdir(d) and os.path.exists(os.path.join(d, "index.html"))
+    ),
     None
 )
 
@@ -71,7 +75,7 @@ if STATIC_DIR:
     async def serve_spa(full_path: str):
         # Skip special API prefixes so 404s in API routes are handled properly
         if full_path.startswith(("api/", "health", "docs", "redoc", "openapi.json", "ws/")):
-            return {"detail": "Not Found"}
+            return JSONResponse({"detail": "Not Found"}, status_code=404)
 
         # Serve static file directly if requested
         file_path = os.path.join(STATIC_DIR, full_path)
@@ -83,4 +87,4 @@ if STATIC_DIR:
         if os.path.exists(index_file):
             return FileResponse(index_file)
 
-        return {"detail": "Not Found"}
+        return JSONResponse({"detail": "Not Found"}, status_code=404)

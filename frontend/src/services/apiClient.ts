@@ -1,6 +1,23 @@
 import { RoomSettings, RoomMetadata, RoomJoinResponse } from "../types/room";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api/v1";
+/**
+ * Resolve the REST base URL.
+ *
+ * In a deployed build VITE_API_BASE_URL is baked in; if it is missing we use
+ * the current origin (same host the SPA is served from) instead of localhost,
+ * which would otherwise be impossible to reach from a visitor's browser.
+ */
+function resolveApiBase(): string {
+  const configured = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim();
+  if (configured) return configured.replace(/\/+$/, "");
+
+  const isLocalDev = /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname);
+  return isLocalDev
+    ? "http://localhost:8000/api/v1"
+    : `${window.location.origin}/api/v1`;
+}
+
+export const API_BASE = resolveApiBase();
 
 export interface CreateRoomParams {
   host_client_id: string;

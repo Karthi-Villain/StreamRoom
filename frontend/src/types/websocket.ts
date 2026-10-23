@@ -8,6 +8,7 @@ export type WSEventType =
   | "room:user_joined"
   | "room:user_left"
   | "room:kick"
+  | "room:error"
   | "sync:request"
   | "sync:state"
   | "sync:play"

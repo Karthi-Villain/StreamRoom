@@ -11,6 +11,7 @@ class WSEventType(str, Enum):
     ROOM_USER_JOINED = "room:user_joined"
     ROOM_USER_LEFT = "room:user_left"
     ROOM_KICK = "room:kick"
+    ROOM_ERROR = "room:error"
 
     # Video Playback Synchronization
     SYNC_REQUEST = "sync:request"

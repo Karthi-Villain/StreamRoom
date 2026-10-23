@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { WebPageState, ControlPolicy } from "../../types/room";
+import { API_BASE } from "../../services/apiClient";
 import styles from "./Player.module.css";
 
 interface SynchronizedWebBrowserProps {
@@ -21,7 +22,7 @@ export const SynchronizedWebBrowser: React.FC<SynchronizedWebBrowserProps> = ({
   const [urlInput, setUrlInput] = useState(webState.current_url);
   const canControl = isHost || controlPolicy === "collaborative";
 
-  const apiBase = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api/v1";
+  const apiBase = API_BASE;
   const proxyUrl = `${apiBase}/proxy?url=${encodeURIComponent(webState.current_url)}`;
 
   // Handle messages received from injected iframe agent
